@@ -1,0 +1,18 @@
+id = "mado.docs-peek"
+name = "mado docs peek"
+version = "0.1.0"
+min_herdr_version = "0.8.0"
+description = "Open the focused pane's docs in mado, in a split beside the agent that is writing them."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "peek"
+title = "Peek at docs with mado"
+contexts = ["pane", "workspace"]
+command = ["sh", "docs-peek.sh"]
+
+[[panes]]
+id = "docs"
+title = "mado"
+placement = "split"
+command = ["sh", "pane.sh"]
