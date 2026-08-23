@@ -70,7 +70,6 @@ rm -f "$record" 2>/dev/null || true
 out=$("$herdr" plugin pane open \
 	--plugin mado.agent-report-viewer \
 	--entrypoint report \
-	--workspace "$workspace_id" \
 	--target-pane "$pane_id" \
 	--placement split --direction right \
 	--cwd "$cwd" \
