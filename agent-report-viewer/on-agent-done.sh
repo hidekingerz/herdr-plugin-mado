@@ -27,7 +27,7 @@ herdr=${HERDR_BIN_PATH:-herdr}
 # agent ペインの cwd。取れなければ何もしない。
 pane_json=$("$herdr" pane get "$pane_id" 2>/dev/null) || exit 0
 if command -v jq >/dev/null 2>&1; then
-	cwd=$(printf '%s' "$pane_json" | jq -r '.result.pane.cwd // empty')
+	cwd=$(printf '%s' "$pane_json" | jq -r '.result.pane.cwd // empty' 2>/dev/null) || cwd=""
 else
 	cwd=$(printf '%s' "$pane_json" | sed -n 's/.*"cwd":"\([^"]*\)".*/\1/p' | head -1)
 fi
@@ -44,7 +44,7 @@ files=$(printf '%s\n' "$changed" | while IFS= read -r f; do
 	[ -f "$cwd/$f" ] || continue
 	mtime=$(stat -f %m "$cwd/$f" 2>/dev/null || stat -c %Y "$cwd/$f" 2>/dev/null) || continue
 	printf '%s\t%s\n' "$mtime" "$cwd/$f"
-done | sort -rn | head -4 | cut -f2- | tr '\n' ' ' | sed 's/ $//')
+done | sort -rn | head -4 | cut -f2-)
 [ -n "$files" ] || exit 0
 
 # ここから先（ペインへ渡す）は Task 3。暫定で新規ペインを開くだけにする。

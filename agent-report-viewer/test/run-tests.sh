@@ -13,7 +13,7 @@ run_hook() {
 	mkdir -p "$WORK/bin" "$WORK/state"
 	cat > "$WORK/bin/herdr" <<-'STUB'
 	#!/bin/sh
-	printf 'herdr %s\n' "$*" >> "$CALLS"
+	printf 'herdr %s\n' "$(printf '%s' "$*" | tr '\n' '|')" >> "$CALLS"
 	case "$1 $2" in
 	"pane get")
 		# pane-gone マーカーは「記録された報告ペイン wT:p9」だけを死んだ扱いに
@@ -123,6 +123,7 @@ test_opens_pane_with_changed_md() {
 	assert_call_grep "MADO_REPORT_FILES=" "changed-md: files env"
 	grep "plugin pane open" "$WORK/calls.log" | grep -q "docs/plan.md" || fail "changed-md: plan.md が渡っていない"
 	grep "plugin pane open" "$WORK/calls.log" | grep -q "report.md" || fail "changed-md: report.md が渡っていない"
+	assert_call_grep "\.md|/" "changed-md: files は改行区切り"
 }
 
 test_caps_at_four_newest() {
