@@ -141,12 +141,63 @@ test_caps_at_four_newest() {
 	done
 }
 
+test_reuses_recorded_pane_via_remote() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	mkdir -p "$WORK/state"
+	printf 'wT:p9' > "$WORK/state/pane-wT"    # 生きているペインの記録あり
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "mado -remote open" "reuse"
+	assert_call_grep "MADO_SOCKET=$WORK/state/report-wT.sock" "reuse: socket 指定"
+	assert_no_call_grep "plugin pane open" "reuse: 新規ペインを開かない"
+}
+
+test_stale_record_reopens_pane() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	mkdir -p "$WORK/state"
+	printf 'wT:p9' > "$WORK/state/pane-wT"
+	: > "$WORK/pane-gone"                      # herdr スタブが wT:p9 を pane_not_found にする
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "plugin pane open" "stale: 開き直す"
+	assert_call_grep "MADO_SOCKET=" "stale: socket を env で渡す"
+	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "stale: 記録が新しいペインに更新されていない"
+}
+
+test_remote_failure_reopens_pane() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	mkdir -p "$WORK/state"
+	printf 'wT:p9' > "$WORK/state/pane-wT"
+	# 注意: `VAR=x func` 形式は POSIX モードの sh では関数呼び出し後も代入が
+	# 残留するため使わない。明示的に set / unset する。
+	STUB_MADO_EXIT=1
+	run_hook "$(done_event wT:p1 wT)"                    # mado 死亡を模擬
+	unset STUB_MADO_EXIT
+	assert_call_grep "plugin pane open" "remote-fail: 開き直す"
+}
+
+test_new_pane_records_pane_id() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	run_hook "$(done_event wT:p1 wT)"
+	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "record: pane id が記録されていない"
+}
+
 test_ignores_non_done
 test_ignores_empty_event
 test_outside_git_does_nothing
 test_no_md_changes_does_nothing
 test_opens_pane_with_changed_md
 test_caps_at_four_newest
+test_reuses_recorded_pane_via_remote
+test_stale_record_reopens_pane
+test_remote_failure_reopens_pane
+test_new_pane_records_pane_id
 
 [ "$FAILED" -eq 0 ] && printf 'ok\n'
 exit "$FAILED"

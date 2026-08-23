@@ -47,12 +47,43 @@ files=$(printf '%s\n' "$changed" | while IFS= read -r f; do
 done | sort -rn | head -4 | cut -f2-)
 [ -n "$files" ] || exit 0
 
-# ここから先（ペインへ渡す）は Task 3。暫定で新規ペインを開くだけにする。
-"$herdr" plugin pane open \
+state=${HERDR_PLUGIN_STATE_DIR:-}
+[ -n "$state" ] || exit 0
+mkdir -p "$state"
+sock="$state/report-$workspace_id.sock"
+record="$state/pane-$workspace_id"
+
+# 記録された報告ペインがまだ生きていれば、その mado にタブとして渡す。
+if [ -f "$record" ] && "$herdr" pane get "$(cat "$record")" >/dev/null 2>&1; then
+	IFS='
+'
+	# shellcheck disable=SC2086
+	set -- $files
+	unset IFS
+	if MADO_SOCKET=$sock mado -remote open "$@" >/dev/null 2>&1; then
+		exit 0
+	fi
+	# ペインは居るが mado が応答しない: 記録を捨てて開き直す。
+fi
+rm -f "$record"
+
+out=$("$herdr" plugin pane open \
 	--plugin mado.agent-report-viewer \
 	--entrypoint report \
 	--workspace "$workspace_id" \
 	--target-pane "$pane_id" \
 	--placement split --direction right \
 	--cwd "$cwd" \
-	--env "MADO_REPORT_FILES=$files" >/dev/null 2>&1 || exit 0
+	--env "MADO_REPORT_FILES=$files" \
+	--env "MADO_SOCKET=$sock" 2>/dev/null) || exit 0
+
+if command -v jq >/dev/null 2>&1; then
+	new_pane=$(printf '%s' "$out" | jq -r '.result.plugin_pane.pane.pane_id // empty' 2>/dev/null) || new_pane=""
+else
+	new_pane=$(printf '%s' "$out" | sed -n 's/.*"pane_id":"\([^"]*\)".*/\1/p' | head -1)
+fi
+# set -e 下で `[ ... ] && cmd` は条件不成立時にスクリプトごと落とすので if で書く。
+if [ -n "$new_pane" ]; then
+	printf '%s' "$new_pane" > "$record"
+fi
+exit 0
