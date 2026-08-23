@@ -66,7 +66,9 @@ run_hook() {
 	mkdir -p "$WORK/bin" "$WORK/state"
 	cat > "$WORK/bin/herdr" <<-'STUB'
 	#!/bin/sh
-	printf 'herdr %s\n' "$*" >> "$CALLS"
+	# 引数内の改行（MADO_REPORT_FILES の改行区切り値など）は `|` に潰して
+	# 1呼び出し=1行でログする。テストはこの `|` で改行区切りを検証できる。
+	printf 'herdr %s\n' "$(printf '%s' "$*" | tr '\n' '|')" >> "$CALLS"
 	case "$1 $2" in
 	"pane get")
 		# pane-gone マーカーは「記録された報告ペイン wT:p9」だけを死んだ扱いに
@@ -287,7 +289,8 @@ herdr=${HERDR_BIN_PATH:-herdr}
 # agent ペインの cwd。取れなければ何もしない。
 pane_json=$("$herdr" pane get "$pane_id" 2>/dev/null) || exit 0
 if command -v jq >/dev/null 2>&1; then
-	cwd=$(printf '%s' "$pane_json" | jq -r '.result.pane.cwd // empty')
+	# jq が壊れた JSON で非0終了しても set -e で落ちないようガードする。
+	cwd=$(printf '%s' "$pane_json" | jq -r '.result.pane.cwd // empty' 2>/dev/null) || cwd=""
 else
 	cwd=$(printf '%s' "$pane_json" | sed -n 's/.*"cwd":"\([^"]*\)".*/\1/p' | head -1)
 fi
@@ -441,7 +444,7 @@ out=$("$herdr" plugin pane open \
 	--env "MADO_SOCKET=$sock" 2>/dev/null) || exit 0
 
 if command -v jq >/dev/null 2>&1; then
-	new_pane=$(printf '%s' "$out" | jq -r '.result.plugin_pane.pane.pane_id // empty')
+	new_pane=$(printf '%s' "$out" | jq -r '.result.plugin_pane.pane.pane_id // empty' 2>/dev/null) || new_pane=""
 else
 	new_pane=$(printf '%s' "$out" | sed -n 's/.*"pane_id":"\([^"]*\)".*/\1/p' | head -1)
 fi
