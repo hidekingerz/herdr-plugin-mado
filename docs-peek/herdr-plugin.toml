@@ -15,4 +15,6 @@ command = ["sh", "docs-peek.sh"]
 id = "docs"
 title = "mado"
 placement = "split"
-command = ["sh", "pane.sh"]
+# Pane commands run in the pane's cwd, not the plugin root, so the
+# entrypoint has to be addressed through HERDR_PLUGIN_ROOT.
+command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/pane.sh\""]
