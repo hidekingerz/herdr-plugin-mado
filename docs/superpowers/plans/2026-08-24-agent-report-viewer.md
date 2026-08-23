@@ -415,7 +415,7 @@ Expected: `reuse` / `record` 系が FAIL（`mado -remote` も記録もまだ無�
 ```sh
 state=${HERDR_PLUGIN_STATE_DIR:-}
 [ -n "$state" ] || exit 0
-mkdir -p "$state"
+mkdir -p "$state" 2>/dev/null || exit 0
 sock="$state/report-$workspace_id.sock"
 record="$state/pane-$workspace_id"
 
@@ -431,7 +431,7 @@ if [ -f "$record" ] && "$herdr" pane get "$(cat "$record")" >/dev/null 2>&1; the
 	fi
 	# ペインは居るが mado が応答しない: 記録を捨てて開き直す。
 fi
-rm -f "$record"
+rm -f "$record" 2>/dev/null || true
 
 out=$("$herdr" plugin pane open \
 	--plugin mado.agent-report-viewer \
@@ -450,7 +450,7 @@ else
 fi
 # set -e 下で `[ ... ] && cmd` は条件不成立時にスクリプトごと落とすので if で書く。
 if [ -n "$new_pane" ]; then
-	printf '%s' "$new_pane" > "$record"
+	printf '%s' "$new_pane" > "$record" 2>/dev/null || true
 fi
 exit 0
 ```
