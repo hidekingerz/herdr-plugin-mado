@@ -13,6 +13,7 @@ beside the agent that is writing it.
 | Plugin | Install | What it does |
 | ------ | ------- | ------------ |
 | [`docs-peek`](docs-peek) | `herdr plugin install hidekingerz/herdr-plugin-mado/docs-peek` | Opens the focused pane's `docs/` in mado, in a split to the right. |
+| [`agent-report-viewer`](agent-report-viewer) | `herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer` | Opens the markdown an agent run produced, in mado, when the run is done. |
 
 ## docs-peek
 
@@ -71,12 +72,48 @@ herdr plugin log list --plugin mado.docs-peek
 
 `herdr plugin unlink mado.docs-peek` when you are done.
 
+## agent-report-viewer
+
+When an agent run finishes, this plugin looks at the uncommitted `*.md`
+files in that agent pane's git work tree and opens them in mado — newest
+first, up to four files. Each workspace gets one mado pane; a later run
+adds tabs to that same pane instead of opening a new one, so the reports
+from a working session collect in one place beside the agent.
+
+### Install
+
+```sh
+herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer
+```
+
+It subscribes to the `pane.agent_status_changed` event rather than a
+keybinding, so there is nothing further to set up — it runs on its own
+whenever an agent run in a git repository finishes.
+
+### Requirements
+
+- herdr 0.8.0 or newer
+- [mado](https://github.com/hidekingerz/mado) v1.2.0 or newer on your
+  `PATH` — this plugin needs `-remote open` and `-watch`, which older
+  mado builds don't have
+- A git repository. Runs outside one are skipped.
+- Linux or macOS. The entrypoints are POSIX shell scripts, so Windows is
+  not supported yet even though mado itself runs there.
+
+### Developing
+
+```sh
+git clone https://github.com/hidekingerz/herdr-plugin-mado
+herdr plugin link herdr-plugin-mado/agent-report-viewer
+herdr plugin log list --plugin mado.agent-report-viewer
+```
+
+`herdr plugin unlink mado.agent-report-viewer` when you are done.
+
 ## Planned
 
 Tracked in [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13):
 
-- **agent-report-viewer** — subscribe to agent `done` events and show the
-  markdown that run produced.
 - **markdown link handler** — Control+click a `.md` path in any pane and
   send it to mado. Wants mado's `--remote open` so it lands as a tab in
   the pane you already have open.
