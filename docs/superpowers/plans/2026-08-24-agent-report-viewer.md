@@ -77,7 +77,8 @@ run_hook() {
 		printf '{"id":"x","result":{"pane":{"pane_id":"%s","cwd":"%s"}}}\n' "$3" "$STUB_CWD"
 		;;
 	"plugin pane")
-		printf '{"id":"x","result":{"plugin_pane":{"pane":{"pane_id":"wT:p9","cwd":"%s"}}}}\n' "$STUB_CWD"
+		# 新規に開いたペインは、既存記録 (wT:p9) と区別できる id を返す。
+		printf '{"id":"x","result":{"plugin_pane":{"pane":{"pane_id":"wT:pR","cwd":"%s"}}}}\n' "$STUB_CWD"
 		;;
 	esac
 	exit 0
@@ -364,11 +365,11 @@ test_stale_record_reopens_pane() {
 	printf 'r\n' > "$WORK/repo/report.md"
 	mkdir -p "$WORK/state"
 	printf 'wT:p9' > "$WORK/state/pane-wT"
-	: > "$WORK/pane-gone"                      # herdr スタブが pane_not_found を返す
+	: > "$WORK/pane-gone"                      # herdr スタブが wT:p9 を pane_not_found にする
 	run_hook "$(done_event wT:p1 wT)"
 	assert_call_grep "plugin pane open" "stale: 開き直す"
 	assert_call_grep "MADO_SOCKET=" "stale: socket を env で渡す"
-	[ "$(cat "$WORK/state/pane-wT")" = "wT:p9" ] && fail "stale: 記録が更新されていない"
+	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "stale: 記録が新しいペインに更新されていない"
 }
 
 test_remote_failure_reopens_pane() {
@@ -377,7 +378,11 @@ test_remote_failure_reopens_pane() {
 	printf 'r\n' > "$WORK/repo/report.md"
 	mkdir -p "$WORK/state"
 	printf 'wT:p9' > "$WORK/state/pane-wT"
-	STUB_MADO_EXIT=1 run_hook "$(done_event wT:p1 wT)"   # mado 死亡を模擬
+	# 注意: `VAR=x func` 形式は POSIX モードの sh では関数呼び出し後も代入が
+	# 残留するため使わない。明示的に set / unset する。
+	STUB_MADO_EXIT=1
+	run_hook "$(done_event wT:p1 wT)"                    # mado 死亡を模擬
+	unset STUB_MADO_EXIT
 	assert_call_grep "plugin pane open" "remote-fail: 開き直す"
 }
 
@@ -386,7 +391,7 @@ test_new_pane_records_pane_id() {
 	scratch_repo "$WORK/repo"
 	printf 'r\n' > "$WORK/repo/report.md"
 	run_hook "$(done_event wT:p1 wT)"
-	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:p9" ] || fail "record: pane id が記録されていない"
+	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "record: pane id が記録されていない"
 }
 
 test_reuses_recorded_pane_via_remote
