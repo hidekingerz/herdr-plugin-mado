@@ -17,6 +17,9 @@ field() {
 
 [ "$(field agent_status)" = "done" ] || exit 0
 
+# mado が無い環境ではイベント駆動でエラーペインを出さない — 静かに何もしない。
+command -v mado >/dev/null 2>&1 || exit 0
+
 pane_id=$(field pane_id)
 workspace_id=$(field workspace_id)
 [ -n "$pane_id" ] || exit 0
@@ -57,8 +60,10 @@ record="$state/pane-$workspace_id"
 if [ -f "$record" ] && "$herdr" pane get "$(cat "$record")" >/dev/null 2>&1; then
 	IFS='
 '
+	set -f
 	# shellcheck disable=SC2086
 	set -- $files
+	set +f
 	unset IFS
 	if MADO_SOCKET=$sock mado -remote open "$@" >/dev/null 2>&1; then
 		exit 0

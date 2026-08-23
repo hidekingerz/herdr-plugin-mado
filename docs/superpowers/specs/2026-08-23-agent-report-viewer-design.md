@@ -36,9 +36,13 @@ markdown を [mado](https://github.com/hidekingerz/mado) で開く。mado の
 
 ```toml
 [[events]]
-on = "pane_agent_status_changed"
+on = "pane.agent_status_changed"
 command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/on-agent-done.sh\""]
 ```
+
+マニフェストのイベント名はドット区切り（`pane.agent_status_changed`）。API
+イベント型名（`pane_agent_status_changed`）とは異なることに注意（実機
+検証済み）。
 
 - イベントコマンドは `HERDR_PLUGIN_EVENT` / `HERDR_PLUGIN_EVENT_JSON` を
   受け取る。ペイロードには `pane_id`、`workspace_id`、`agent_status`
@@ -76,8 +80,9 @@ git 差分ベース。mtime 追跡ではなくこちらを選んだのは、実�
 - 存在しなければ：`herdr plugin pane open --entrypoint report --placement
   split --direction right --cwd <cwd>` を、ファイルリストを
   `--env MADO_REPORT_FILES=<改行区切りのパス>` に載せて実行する。
-  `pane.sh` は `mado --watch <cwd> <files…>` を起動する（ファイルはタブで
-  開き、`--watch` が読んでいる間も内容を追従させる）。
+  `pane.sh` は `mado -watch <files…>` を起動する（cwd はペインの `--cwd` で
+  渡るため引数には含めない。ファイルはタブで開き、`-watch` が内容を
+  追従させる）。
 
 ## エラー処理
 

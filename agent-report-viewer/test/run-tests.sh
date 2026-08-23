@@ -9,8 +9,11 @@ FAILED=0
 # ── スタブ環境を組み立てて on-agent-done.sh を1回実行する ──
 # 使い方: run_hook <event-json>
 # 前提: $WORK が作成済み。呼び出しは $WORK/calls.log に1行ずつ残る。
-run_hook() {
-	mkdir -p "$WORK/bin" "$WORK/state"
+# 内部ヘルパー: スタブ一式を組み立てて on-agent-done.sh を実行する。
+# mado スタブは $WORK/bin とは別の $WORK/madobin に置く — PATH から
+# madobin を外すだけで「mado が無い環境」を再現できるようにするため。
+_run_hook_common() { # <path-value> <event-json>
+	mkdir -p "$WORK/bin" "$WORK/madobin" "$WORK/state"
 	cat > "$WORK/bin/herdr" <<-'STUB'
 	#!/bin/sh
 	printf 'herdr %s\n' "$(printf '%s' "$*" | tr '\n' '|')" >> "$CALLS"
@@ -30,21 +33,37 @@ run_hook() {
 	esac
 	exit 0
 	STUB
-	cat > "$WORK/bin/mado" <<-'STUB'
+	cat > "$WORK/madobin/mado" <<-'STUB'
 	#!/bin/sh
 	printf 'mado %s MADO_SOCKET=%s\n' "$*" "${MADO_SOCKET:-}" >> "$CALLS"
 	exit "${STUB_MADO_EXIT:-0}"
 	STUB
-	chmod +x "$WORK/bin/herdr" "$WORK/bin/mado"
+	chmod +x "$WORK/bin/herdr" "$WORK/madobin/mado"
 	CALLS="$WORK/calls.log"; : > "$CALLS"
 	export CALLS STUB_CWD="$WORK/repo" STUB_PANE_GONE="$WORK/pane-gone"
-	env PATH="$WORK/bin:$PATH" \
+	env PATH="$1" \
 		HERDR_BIN_PATH="$WORK/bin/herdr" \
 		HERDR_PLUGIN_STATE_DIR="$WORK/state" \
-		HERDR_PLUGIN_EVENT_JSON="$1" \
+		HERDR_PLUGIN_EVENT_JSON="$2" \
 		STUB_MADO_EXIT="${STUB_MADO_EXIT:-0}" \
 		sh "$ROOT/on-agent-done.sh"
 	HOOK_EXIT=$?
+}
+
+# 使い方: run_hook <event-json>
+# 前提: $WORK が作成済み。呼び出しは $WORK/calls.log に1行ずつ残る。
+run_hook() {
+	_run_hook_common "$WORK/bin:$WORK/madobin:$PATH" "$1"
+}
+
+# run_hook と同じだが mado スタブを PATH から外す。加えて $PATH をそのまま
+# 継ぎ足すと開発機に homebrew 等でインストール済みの本物の mado が拾われて
+# しまう（実際に踏んだ）ので、標準の system ディレクトリだけに絞った PATH
+# で起動する ("mado が無い環境")。sh / git / sed / sort 等は /usr/bin,
+# /bin に入っているので動作に支障は無い（jq が無くても field() は sed に
+# フォールバックする）。
+run_hook_no_mado() {
+	_run_hook_common "$WORK/bin:/usr/bin:/bin:/usr/sbin:/sbin" "$1"
 }
 
 # ── アサーション ──
@@ -188,6 +207,15 @@ test_new_pane_records_pane_id() {
 	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "record: pane id が記録されていない"
 }
 
+test_missing_mado_does_nothing() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	run_hook_no_mado "$(done_event wT:p1 wT)"
+	[ "$HOOK_EXIT" -eq 0 ] || fail "no-mado: exit 0 でない ($HOOK_EXIT)"
+	assert_no_call_grep "plugin pane open" "no-mado"
+}
+
 test_ignores_non_done
 test_ignores_empty_event
 test_outside_git_does_nothing
@@ -198,6 +226,7 @@ test_reuses_recorded_pane_via_remote
 test_stale_record_reopens_pane
 test_remote_failure_reopens_pane
 test_new_pane_records_pane_id
+test_missing_mado_does_nothing
 
 [ "$FAILED" -eq 0 ] && printf 'ok\n'
 exit "$FAILED"

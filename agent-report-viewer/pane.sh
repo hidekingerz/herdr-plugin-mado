@@ -15,8 +15,10 @@ fi
 
 IFS='
 '
+set -f
 # shellcheck disable=SC2086
 set -- ${MADO_REPORT_FILES:-}
+set +f
 unset IFS
 
 exec mado -watch "$@"
