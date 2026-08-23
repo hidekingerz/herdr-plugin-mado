@@ -1,37 +1,38 @@
-# agent-report-viewer — design
+# agent-report-viewer — 設計
 
-2026-08-23. Approved in conversation before writing this spec.
+2026-08-23。この仕様を書く前に、会話上で設計の承認を得ている。
 
-## Purpose
+## 目的
 
-When an agent run finishes, show the markdown that run produced —
-without the user having to notice the run finished, find the files, and
-open them. The plugin subscribes to herdr's agent status events and
-opens the produced markdown in [mado](https://github.com/hidekingerz/mado),
-reusing one mado pane per workspace.
+agent のランが終わったとき、そのランが生成した markdown を表示する —
+ユーザーがランの終了に気づき、ファイルを探し、開く、という手間を無くす。
+このプラグインは herdr の agent ステータスイベントを購読し、生成された
+markdown を [mado](https://github.com/hidekingerz/mado) で開く。mado の
+ペインはワークスペースごとに1枚を再利用する。
 
-First of the three planned plugins in this repository; the other two
-(markdown link handler, loop-state dashboard) are out of scope here.
+このリポジトリで計画している3プラグインの最初の1つ。残りの2つ
+（markdown link handler、loop-state dashboard）はこの仕様の対象外。
 
-## Constraints
+## 制約
 
-- herdr 0.8.0+, mado v1.2.0+ (`-remote`, `-watch`) on `PATH`.
-- Same shape as docs-peek: a plugin directory of POSIX shell scripts and
-  a `herdr-plugin.toml`; no build step, no daemon. Linux and macOS.
-- The hook runs on every agent status change. It must never get in the
-  user's way: every failure mode degrades to "do nothing", silently.
+- herdr 0.8.0 以上、mado v1.2.0 以上（`-remote`、`-watch`）が `PATH` にあること。
+- docs-peek と同じ構成：POSIX シェルスクリプトと `herdr-plugin.toml` からなる
+  プラグインディレクトリ。ビルド工程もデーモンも無し。Linux と macOS。
+- フックは agent のステータスが変わるたびに走る。ユーザーの邪魔を
+  絶対にしないこと：あらゆる失敗は「何もしない」に静かに倒す。
 
-## Structure
+## 構成
 
-New directory `agent-report-viewer/`, plugin id `mado.agent-report-viewer`:
+新しいディレクトリ `agent-report-viewer/`、プラグイン id は
+`mado.agent-report-viewer`：
 
-| File | Role |
-| ---- | ---- |
-| `herdr-plugin.toml` | Manifest: event subscription + pane entrypoint |
-| `on-agent-done.sh` | Event hook: detect produced markdown, route to a pane |
-| `pane.sh` | Pane entrypoint: run mado on the detected files |
+| ファイル | 役割 |
+| -------- | ---- |
+| `herdr-plugin.toml` | マニフェスト：イベント購読とペインのエントリポイント |
+| `on-agent-done.sh` | イベントフック：生成された markdown を検出しペインへ渡す |
+| `pane.sh` | ペインのエントリポイント：検出したファイルで mado を起動 |
 
-## Event subscription
+## イベント購読
 
 ```toml
 [[events]]
@@ -39,75 +40,76 @@ on = "pane_agent_status_changed"
 command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/on-agent-done.sh\""]
 ```
 
-- Event commands receive `HERDR_PLUGIN_EVENT` / `HERDR_PLUGIN_EVENT_JSON`.
-  The payload carries `pane_id`, `workspace_id`, `agent_status`
-  (`idle | working | blocked | done | unknown`).
-- The hook exits immediately unless `agent_status` is `done`.
-- All entrypoints are addressed through `$HERDR_PLUGIN_ROOT` because
-  herdr runs plugin commands in the pane's (or event's) cwd, not the
-  plugin root — the docs-peek 0.1.0 lesson.
+- イベントコマンドは `HERDR_PLUGIN_EVENT` / `HERDR_PLUGIN_EVENT_JSON` を
+  受け取る。ペイロードには `pane_id`、`workspace_id`、`agent_status`
+  （`idle | working | blocked | done | unknown`）が入る。
+- フックは `agent_status` が `done` でなければ即終了する。
+- エントリポイントはすべて `$HERDR_PLUGIN_ROOT` 経由で参照する。herdr は
+  プラグインのコマンドをプラグインルートではなくペイン（やイベント）の
+  cwd で実行するため — docs-peek 0.1.0 で学んだ教訓。
 
-## Detecting the produced markdown
+## 生成された markdown の検出
 
-Git-diff based, chosen over mtime tracking for simplicity and for
-matching the intuition "the run's output is what is written but not
-yet committed":
+git 差分ベース。mtime 追跡ではなくこちらを選んだのは、実装が単純で、
+「ランの成果物とは、書かれたがまだコミットされていないもの」という
+直感に合うため：
 
-1. Resolve the agent pane's cwd via `herdr pane get <pane_id>`
-   (`HERDR_BIN_PATH`).
-2. If the cwd is not inside a git work tree: exit silently.
-3. `git -C <cwd> status --porcelain` → keep modified and untracked
-   paths ending in `.md`.
-4. Sort by mtime, newest first; cap at 4 files.
-5. Zero candidates: exit silently.
+1. `herdr pane get <pane_id>`（`HERDR_BIN_PATH`）で agent ペインの cwd を
+   解決する。
+2. cwd が git のワークツリー内でなければ：静かに終了。
+3. `git -C <cwd> status --porcelain` → 変更・未追跡のパスのうち `.md` で
+   終わるものを残す。
+4. mtime の新しい順に並べ、上限4件。
+5. 候補が0件なら：静かに終了。
 
-The cap guards against runs that touch many markdown files; the newest
-files are the most likely to be the report.
+上限は、markdown を大量に触るランへの保険。最も新しいファイルが
+レポートである可能性が高い。
 
-## Showing the report (one pane per workspace)
+## レポートの表示（ワークスペースごとに1ペイン）
 
-- The plugin keeps one mado pane per workspace. The pane id for each
-  workspace is recorded in `HERDR_PLUGIN_STATE_DIR` when a pane is
-  opened.
-- If a recorded pane still exists (verify via `herdr pane get`; stale
-  records are dropped): hand the files to the running mado with
-  `mado -remote open <files…>`.
-- Otherwise: `herdr plugin pane open --entrypoint report --placement
-  split --direction right --cwd <cwd>` with the file list passed via
-  `--env MADO_REPORT_FILES=<newline-separated paths>`; `pane.sh` runs
-  `mado --watch <cwd> <files…>` (files open as tabs; `--watch` keeps
-  them live while the user reads).
+- プラグインは mado のペインをワークスペースごとに1枚だけ保つ。ペインを
+  開いたとき、そのワークスペースのペイン id を `HERDR_PLUGIN_STATE_DIR` に
+  記録する。
+- 記録されたペインがまだ存在すれば（`herdr pane get` で確認。消えていた
+  記録は破棄）：`mado -remote open <files…>` で動いている mado にファイルを
+  渡す。
+- 存在しなければ：`herdr plugin pane open --entrypoint report --placement
+  split --direction right --cwd <cwd>` を、ファイルリストを
+  `--env MADO_REPORT_FILES=<改行区切りのパス>` に載せて実行する。
+  `pane.sh` は `mado --watch <cwd> <files…>` を起動する（ファイルはタブで
+  開き、`--watch` が読んでいる間も内容を追従させる）。
 
-## Error handling
+## エラー処理
 
-Every failure — no git, no mado, pane vanished, unparsable payload —
-means "do nothing", exit 0, at most a line in the plugin log
-(`herdr plugin log list`). The hook must never surface an error to the
-user mid-session.
+あらゆる失敗 — git が無い、mado が無い、ペインが消えた、ペイロードが
+パースできない — は「何もしない」を意味し、exit 0 で終わる。せいぜい
+プラグインログ（`herdr plugin log list`）に1行残す程度。フックが
+セッション中のユーザーにエラーを見せることは決してあってはならない。
 
-## Risks to verify first during implementation
+## 実装時に最初に検証すべきリスク
 
-1. **`mado -remote` addressing** — with several mado instances running
-   (e.g. docs-peek's pane), confirm which instance receives `-remote
-   open` and how to target the right one. If instances cannot be
-   targeted, fall back to closing and reopening the plugin's own pane.
-2. **`done` dedup** — confirm whether one run can emit
-   `pane_agent_status_changed(done)` more than once; if so, dedupe via
-   a per-pane marker in `HERDR_PLUGIN_STATE_DIR`.
+1. **`mado -remote` の宛先解決** — mado のインスタンスが複数動いている
+   状態（docs-peek のペインなど）で、`-remote open` がどのインスタンスに
+   届くか、正しいインスタンスをどう指定できるかを確認する。インスタンスを
+   指定できない場合は、プラグイン自身のペインを閉じて開き直す方式に
+   フォールバックする。
+2. **`done` の重複抑止** — 1回のランで `pane_agent_status_changed(done)` が
+   複数回発火しうるかを確認する。しうるなら、`HERDR_PLUGIN_STATE_DIR` の
+   ペイン単位マーカーで重複を抑止する。
 
-## Testing
+## テスト
 
-- Shell scripts are testable standalone: invoke `on-agent-done.sh` with
-  a mocked `HERDR_PLUGIN_EVENT_JSON` and a scratch git repo; assert on
-  the herdr/mado commands it would run (`HERDR_BIN_PATH` pointed at a
-  stub).
-- End-to-end manually in a live herdr session: run an agent that writes
-  a markdown file → pane appears on done; run again → the same pane
-  gains a tab instead of a second pane; run with no markdown changes →
-  nothing happens.
+- シェルスクリプトは単体で実行してテストできる：`HERDR_PLUGIN_EVENT_JSON`
+  をモックし、使い捨ての git リポジトリを用意して `on-agent-done.sh` を
+  起動し、実行されるはずの herdr / mado コマンドを検証する
+  （`HERDR_BIN_PATH` をスタブに向ける）。
+- E2E は実際の herdr セッションで手動確認：markdown を書く agent ランを
+  実行 → done でペインが出現する。もう一度実行 → 2枚目のペインではなく
+  同じペインにタブが増える。markdown に変更が無いランを実行 → 何も
+  起きない。
 
-## Out of scope
+## 対象外
 
-- Non-git directories (mtime fallback) — revisit if it hurts in practice.
-- Cross-workspace aggregation, history of past reports, notifications.
-- Windows.
+- git 管理外のディレクトリ（mtime フォールバック）— 実際に困ったら再検討。
+- ワークスペース横断の集約、過去レポートの履歴、通知。
+- Windows。
