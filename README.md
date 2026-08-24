@@ -14,6 +14,7 @@ beside the agent that is writing it.
 | ------ | ------- | ------------ |
 | [`docs-peek`](docs-peek) | `herdr plugin install hidekingerz/herdr-plugin-mado/docs-peek` | Opens the focused pane's `docs/` in mado, in a split to the right. |
 | [`agent-report-viewer`](agent-report-viewer) | `herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer` | Opens the markdown an agent run produced, in mado, when the run is done. |
+| [`loop-dash`](loop-dash) | `herdr plugin install hidekingerz/herdr-plugin-mado/loop-dash` | Keeps a `loop/` agent loop's state docs on screen in a mado pane that follows the files. |
 
 ## docs-peek
 
@@ -110,6 +111,66 @@ herdr plugin log list --plugin mado.agent-report-viewer
 
 `herdr plugin unlink mado.agent-report-viewer` when you are done.
 
+## loop-dash
+
+A single-agent loop keeps its state under `loop/` — `MEMORY.md`, the
+memory it rewrites every iteration; `VISION.md`, the goal and definition
+of done; `ARCHITECTURE.md`, the stack and verify command; and
+`RULES.md`, what it must not do. Press the key you bind to this plugin
+and those files open in a mado pane that follows them as the loop
+rewrites them.
+
+The plugin looks in the focused pane's cwd for the known names
+`loop/MEMORY.md`, `loop/VISION.md`, `loop/ARCHITECTURE.md` and
+`loop/RULES.md`, and opens every one it finds as a tab, watching for
+changes. Each workspace gets one dashboard pane: invoking the action
+again refreshes the same pane instead of opening another. When none of
+the known files exist, nothing happens.
+
+### Install
+
+```sh
+herdr plugin install hidekingerz/herdr-plugin-mado/loop-dash
+herdr plugin action list --plugin mado.loop-dash
+```
+
+Then bind a key in your herdr config:
+
+```toml
+[[keys.command]]
+key = "prefix+t"
+type = "plugin_action"
+command = "mado.loop-dash.show"
+description = "show loop state in mado"
+```
+
+It also runs without a keybinding:
+
+```sh
+herdr plugin action invoke mado.loop-dash.show
+```
+
+### Requirements
+
+- herdr 0.8.0 or newer
+- [mado](https://github.com/hidekingerz/mado) v1.2.0 or newer on your
+  `PATH` — this plugin needs `-remote open` and `-watch`, which older
+  mado builds don't have
+- Linux or macOS. The entrypoints are POSIX shell scripts, so Windows is
+  not supported yet even though mado itself runs there.
+- `jq` is used when present and not needed otherwise.
+
+### Developing
+
+```sh
+git clone https://github.com/hidekingerz/herdr-plugin-mado
+herdr plugin link herdr-plugin-mado/loop-dash
+herdr plugin action invoke mado.loop-dash.show
+herdr plugin log list --plugin mado.loop-dash
+```
+
+`herdr plugin unlink mado.loop-dash` when you are done.
+
 ## Planned
 
 Tracked in [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13):
@@ -117,8 +178,6 @@ Tracked in [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13):
 - **markdown link handler** — Control+click a `.md` path in any pane and
   send it to mado. Wants mado's `--remote open` so it lands as a tab in
   the pane you already have open.
-- **loop-state dashboard** — keep `TASKS.md` / `log.md` on screen in a
-  pane that follows the file. Wants mado's `--watch`.
 
 ## License
 
