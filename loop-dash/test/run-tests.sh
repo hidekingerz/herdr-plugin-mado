@@ -76,52 +76,52 @@ test_no_known_files_does_nothing() {
 	assert_no_call_grep "^mado" "no-files"
 }
 
-test_opens_dash_with_tasks_md() {
-	new_work
-	mkdir -p "$WORK/repo"
-	printf '%s\n' '- [ ] task' > "$WORK/repo/TASKS.md"
-	run_action "$(context_json "$WORK/repo")"
-	[ "$ACTION_EXIT" -eq 0 ] || fail "tasks: exit 0 でない ($ACTION_EXIT)"
-	assert_call_grep "plugin pane open" "tasks"
-	grep "plugin pane open" "$WORK/calls.log" | grep -q "MADO_DASH_FILES=$WORK/repo/TASKS.md" \
-		|| fail "tasks: TASKS.md が渡っていない ($(cat "$WORK/calls.log"))"
-	assert_call_grep "MADO_SOCKET=" "tasks: socket を env で渡す"
-}
-
-test_finds_loop_dir_variants() {
+test_opens_dash_with_memory_md() {
 	new_work
 	mkdir -p "$WORK/repo/loop"
-	printf '%s\n' 'log' > "$WORK/repo/loop/log.md"
+	printf '%s\n' '# MEMORY' > "$WORK/repo/loop/MEMORY.md"
 	run_action "$(context_json "$WORK/repo")"
-	grep "plugin pane open" "$WORK/calls.log" | grep -q "MADO_DASH_FILES=$WORK/repo/loop/log.md" \
-		|| fail "loop-dir: loop/log.md が渡っていない ($(cat "$WORK/calls.log"))"
+	[ "$ACTION_EXIT" -eq 0 ] || fail "memory: exit 0 でない ($ACTION_EXIT)"
+	assert_call_grep "plugin pane open" "memory"
+	grep "plugin pane open" "$WORK/calls.log" | grep -q "MADO_DASH_FILES=$WORK/repo/loop/MEMORY.md" \
+		|| fail "memory: loop/MEMORY.md が渡っていない ($(cat "$WORK/calls.log"))"
+	assert_call_grep "MADO_SOCKET=" "memory: socket を env で渡す"
+}
+
+test_finds_vision_md() {
+	new_work
+	mkdir -p "$WORK/repo/loop"
+	printf '%s\n' 'goal' > "$WORK/repo/loop/VISION.md"
+	run_action "$(context_json "$WORK/repo")"
+	grep "plugin pane open" "$WORK/calls.log" | grep -q "MADO_DASH_FILES=$WORK/repo/loop/VISION.md" \
+		|| fail "vision: loop/VISION.md が渡っていない ($(cat "$WORK/calls.log"))"
 }
 
 test_collects_all_known_names_in_order() {
 	new_work
 	mkdir -p "$WORK/repo/loop"
-	for f in TASKS.md log.md loop/TASKS.md loop/log.md; do
+	for f in loop/MEMORY.md loop/VISION.md; do
 		printf '%s\n' x > "$WORK/repo/$f"
 	done
 	run_action "$(context_json "$WORK/repo")"
-	# 改行はスタブで `|` に潰される。順序ごと検証する。
+	# 改行はスタブで `|` に潰される。順序ごと検証する（MEMORY が先）。
 	grep "plugin pane open" "$WORK/calls.log" \
-		| grep -q "MADO_DASH_FILES=$WORK/repo/TASKS.md|$WORK/repo/log.md|$WORK/repo/loop/TASKS.md|$WORK/repo/loop/log.md" \
-		|| fail "order: 4件が順序どおりに渡っていない ($(cat "$WORK/calls.log"))"
+		| grep -q "MADO_DASH_FILES=$WORK/repo/loop/MEMORY.md|$WORK/repo/loop/VISION.md" \
+		|| fail "order: 2件が順序どおりに渡っていない ($(cat "$WORK/calls.log"))"
 }
 
 test_new_pane_records_pane_id() {
 	new_work
-	mkdir -p "$WORK/repo"
-	printf '%s\n' x > "$WORK/repo/TASKS.md"
+	mkdir -p "$WORK/repo/loop"
+	printf '%s\n' x > "$WORK/repo/loop/MEMORY.md"
 	run_action "$(context_json "$WORK/repo")"
 	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "record: pane id が記録されていない"
 }
 
 test_reuses_recorded_pane_via_remote() {
 	new_work
-	mkdir -p "$WORK/repo" "$WORK/state"
-	printf '%s\n' x > "$WORK/repo/TASKS.md"
+	mkdir -p "$WORK/repo/loop" "$WORK/state"
+	printf '%s\n' x > "$WORK/repo/loop/MEMORY.md"
 	printf 'wT:p9' > "$WORK/state/pane-wT"    # 生きているペインの記録あり
 	run_action "$(context_json "$WORK/repo")"
 	assert_call_grep "mado -remote open" "reuse"
@@ -131,8 +131,8 @@ test_reuses_recorded_pane_via_remote() {
 
 test_stale_record_reopens_pane() {
 	new_work
-	mkdir -p "$WORK/repo" "$WORK/state"
-	printf '%s\n' x > "$WORK/repo/TASKS.md"
+	mkdir -p "$WORK/repo/loop" "$WORK/state"
+	printf '%s\n' x > "$WORK/repo/loop/MEMORY.md"
 	printf 'wT:p9' > "$WORK/state/pane-wT"
 	: > "$WORK/pane-gone"                      # herdr スタブが wT:p9 を pane_not_found にする
 	run_action "$(context_json "$WORK/repo")"
@@ -142,8 +142,8 @@ test_stale_record_reopens_pane() {
 
 test_remote_failure_reopens_pane() {
 	new_work
-	mkdir -p "$WORK/repo" "$WORK/state"
-	printf '%s\n' x > "$WORK/repo/TASKS.md"
+	mkdir -p "$WORK/repo/loop" "$WORK/state"
+	printf '%s\n' x > "$WORK/repo/loop/MEMORY.md"
 	printf 'wT:p9' > "$WORK/state/pane-wT"
 	# `VAR=x func` 形式は POSIX モードの sh で代入が残留するため使わない。
 	STUB_MADO_EXIT=1
@@ -153,8 +153,8 @@ test_remote_failure_reopens_pane() {
 }
 
 test_no_known_files_does_nothing
-test_opens_dash_with_tasks_md
-test_finds_loop_dir_variants
+test_opens_dash_with_memory_md
+test_finds_vision_md
 test_collects_all_known_names_in_order
 test_new_pane_records_pane_id
 test_reuses_recorded_pane_via_remote
