@@ -171,13 +171,15 @@ herdr plugin log list --plugin mado.loop-dash
 
 `herdr plugin unlink mado.loop-dash` when you are done.
 
-## Planned
-
-Tracked in [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13):
+## Shelved
 
 - **markdown link handler** — Control+click a `.md` path in any pane and
-  send it to mado. Wants mado's `--remote open` so it lands as a tab in
-  the pane you already have open.
+  send it to mado. Shelved: herdr routes link-handler clicks only for
+  `http(s)` URLs — bare file paths, `file://` URLs, and OSC 8 hyperlinks
+  never reach a handler (verified against herdr 0.8.0). A plugin cannot
+  make an agent-written `.md` path clickable on its own. Revisit if herdr
+  starts routing `file://` or OSC 8 links; tracked in
+  [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13).
 
 ## License
 
