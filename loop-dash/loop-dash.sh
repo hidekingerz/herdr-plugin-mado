@@ -26,10 +26,11 @@ workspace_id=$(field workspace_id)
 [ -n "$workspace_id" ] || exit 0
 
 # 既知名を順に探す。見つかったものを改行区切りで集める。
-# single-agent-loop（loop/ 雛形）の状態ファイル: MEMORY が毎周更新される
-# 記憶、VISION がゴールと DoD。
+# single-agent-loop（loop/ 雛形）の状態ファイル。MEMORY が毎周更新される
+# 記憶、VISION がゴールと DoD、ARCHITECTURE が VERIFY コマンド、RULES が
+# 禁止事項。ループを見張るのに手元に置きたい順に並べる。
 files=""
-for f in loop/MEMORY.md loop/VISION.md; do
+for f in loop/MEMORY.md loop/VISION.md loop/ARCHITECTURE.md loop/RULES.md; do
 	if [ -f "$base/$f" ]; then
 		files="${files}${files:+
 }$base/$f"

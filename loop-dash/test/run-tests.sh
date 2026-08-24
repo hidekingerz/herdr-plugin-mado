@@ -100,14 +100,14 @@ test_finds_vision_md() {
 test_collects_all_known_names_in_order() {
 	new_work
 	mkdir -p "$WORK/repo/loop"
-	for f in loop/MEMORY.md loop/VISION.md; do
+	for f in loop/MEMORY.md loop/VISION.md loop/ARCHITECTURE.md loop/RULES.md; do
 		printf '%s\n' x > "$WORK/repo/$f"
 	done
 	run_action "$(context_json "$WORK/repo")"
 	# 改行はスタブで `|` に潰される。順序ごと検証する（MEMORY が先）。
 	grep "plugin pane open" "$WORK/calls.log" \
-		| grep -q "MADO_DASH_FILES=$WORK/repo/loop/MEMORY.md|$WORK/repo/loop/VISION.md" \
-		|| fail "order: 2件が順序どおりに渡っていない ($(cat "$WORK/calls.log"))"
+		| grep -q "MADO_DASH_FILES=$WORK/repo/loop/MEMORY.md|$WORK/repo/loop/VISION.md|$WORK/repo/loop/ARCHITECTURE.md|$WORK/repo/loop/RULES.md" \
+		|| fail "order: 4件が順序どおりに渡っていない ($(cat "$WORK/calls.log"))"
 }
 
 test_new_pane_records_pane_id() {

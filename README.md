@@ -14,7 +14,7 @@ beside the agent that is writing it.
 | ------ | ------- | ------------ |
 | [`docs-peek`](docs-peek) | `herdr plugin install hidekingerz/herdr-plugin-mado/docs-peek` | Opens the focused pane's `docs/` in mado, in a split to the right. |
 | [`agent-report-viewer`](agent-report-viewer) | `herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer` | Opens the markdown an agent run produced, in mado, when the run is done. |
-| [`loop-dash`](loop-dash) | `herdr plugin install hidekingerz/herdr-plugin-mado/loop-dash` | Keeps a `loop/` agent loop's `MEMORY.md` / `VISION.md` on screen in a mado pane that follows the files. |
+| [`loop-dash`](loop-dash) | `herdr plugin install hidekingerz/herdr-plugin-mado/loop-dash` | Keeps a `loop/` agent loop's state docs on screen in a mado pane that follows the files. |
 
 ## docs-peek
 
@@ -114,16 +114,18 @@ herdr plugin log list --plugin mado.agent-report-viewer
 ## loop-dash
 
 A single-agent loop keeps its state under `loop/` — `MEMORY.md`, the
-memory it rewrites every iteration, and `VISION.md`, the goal and
-definition of done it works toward. Press the key you bind to this
-plugin and those files open in a mado pane that follows them as the loop
+memory it rewrites every iteration; `VISION.md`, the goal and definition
+of done; `ARCHITECTURE.md`, the stack and verify command; and
+`RULES.md`, what it must not do. Press the key you bind to this plugin
+and those files open in a mado pane that follows them as the loop
 rewrites them.
 
 The plugin looks in the focused pane's cwd for the known names
-`loop/MEMORY.md` and `loop/VISION.md`, and opens every one it finds as a
-tab, watching for changes. Each workspace gets one dashboard pane:
-invoking the action again refreshes the same pane instead of opening
-another. When none of the known files exist, nothing happens.
+`loop/MEMORY.md`, `loop/VISION.md`, `loop/ARCHITECTURE.md` and
+`loop/RULES.md`, and opens every one it finds as a tab, watching for
+changes. Each workspace gets one dashboard pane: invoking the action
+again refreshes the same pane instead of opening another. When none of
+the known files exist, nothing happens.
 
 ### Install
 
