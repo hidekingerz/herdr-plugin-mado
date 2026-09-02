@@ -150,6 +150,8 @@ test_remote_failure_reopens_pane() {
 	run_action "$(context_json "$WORK/repo")"  # mado 死亡を模擬
 	unset STUB_MADO_EXIT
 	assert_call_grep "plugin pane open" "remote-fail: 開き直す"
+	# 生きている孤児ペインを残したまま開き直すと重複する。閉じてから開くこと。
+	assert_call_grep "pane close wT:p9" "remote-fail: 旧ペインを閉じる"
 }
 
 test_no_known_files_does_nothing

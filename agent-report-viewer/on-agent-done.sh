@@ -68,7 +68,10 @@ if [ -f "$record" ] && "$herdr" pane get "$(cat "$record")" >/dev/null 2>&1; the
 	if MADO_SOCKET=$sock mado -remote open "$@" >/dev/null 2>&1; then
 		exit 0
 	fi
-	# ペインは居るが mado が応答しない: 記録を捨てて開き直す。
+	# ペインは居るが mado がこの socket で応答しない（herdr 再起動でペインが
+	# 復元され env が失われた、など）。生きた孤児を残したまま開き直すと
+	# 重複するので、先に閉じてから開き直す。
+	"$herdr" pane close "$(cat "$record")" >/dev/null 2>&1 || true
 fi
 rm -f "$record" 2>/dev/null || true
 
