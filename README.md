@@ -31,7 +31,9 @@ herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer --ref v0.
 There is no auto-update; releases are listed on the
 [releases page](https://github.com/hidekingerz/herdr-plugin-mado/releases).
 A plugin you `herdr plugin link`ed from a local clone follows that clone
-instead — `git pull` is the update.
+instead — `git pull` is the update. Installing it from GitHub on top
+fails with `already linked from a local path`; `herdr plugin unlink
+<id>` first if you really want the managed copy.
 
 ## docs-peek
 
