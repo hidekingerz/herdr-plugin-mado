@@ -16,6 +16,23 @@ beside the agent that is writing it.
 | [`agent-report-viewer`](agent-report-viewer) | `herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer` | Opens the markdown an agent run produced, in mado, when the run is done. |
 | [`loop-dash`](loop-dash) | `herdr plugin install hidekingerz/herdr-plugin-mado/loop-dash` | Keeps a `loop/` agent loop's state docs on screen in a mado pane that follows the files. |
 
+## Updating
+
+herdr has no `plugin update` command. To pick up a new release, run the
+same `herdr plugin install …` command again: it replaces the managed
+checkout in place and keeps your plugin config. Pin a specific release
+with `--ref`:
+
+```sh
+herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer            # latest
+herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer --ref v0.3.1  # pinned
+```
+
+There is no auto-update; releases are listed on the
+[releases page](https://github.com/hidekingerz/herdr-plugin-mado/releases).
+A plugin you `herdr plugin link`ed from a local clone follows that clone
+instead — `git pull` is the update.
+
 ## docs-peek
 
 Press the key you bind to it and mado opens beside the agent, rooted at
