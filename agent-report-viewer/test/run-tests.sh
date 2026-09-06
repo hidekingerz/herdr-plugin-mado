@@ -12,7 +12,7 @@ FAILED=0
 # 内部ヘルパー: スタブ一式を組み立てて on-agent-done.sh を実行する。
 # mado スタブは $WORK/bin とは別の $WORK/madobin に置く — PATH から
 # madobin を外すだけで「mado が無い環境」を再現できるようにするため。
-_run_hook_common() { # <path-value> <event-json>
+_make_stubs() {
 	mkdir -p "$WORK/bin" "$WORK/madobin" "$WORK/state"
 	cat > "$WORK/bin/herdr" <<-'STUB'
 	#!/bin/sh
@@ -41,6 +41,10 @@ _run_hook_common() { # <path-value> <event-json>
 	chmod +x "$WORK/bin/herdr" "$WORK/madobin/mado"
 	CALLS="$WORK/calls.log"; : > "$CALLS"
 	export CALLS STUB_CWD="$WORK/repo" STUB_PANE_GONE="$WORK/pane-gone"
+}
+
+_run_hook_common() { # <path-value> <event-json>
+	_make_stubs
 	env PATH="$1" \
 		HERDR_BIN_PATH="$WORK/bin/herdr" \
 		HERDR_PLUGIN_STATE_DIR="$WORK/state" \
@@ -48,6 +52,23 @@ _run_hook_common() { # <path-value> <event-json>
 		STUB_MADO_EXIT="${STUB_MADO_EXIT:-0}" \
 		sh "$ROOT/on-agent-done.sh"
 	HOOK_EXIT=$?
+}
+
+# 使い方: run_show [--no-herdr] <file…>
+# $WORK/repo を cwd にして show.sh を実行する（Claude がリポジトリ内で呼ぶ想定）。
+# --no-herdr は HERDR_WORKSPACE_ID 無し＝herdr の外から呼ばれた状況を再現する。
+run_show() {
+	_make_stubs
+	ws=wT
+	if [ "${1:-}" = "--no-herdr" ]; then ws=""; shift; fi
+	( cd "$WORK/repo" && env PATH="$WORK/bin:$WORK/madobin:$PATH" \
+		HERDR_BIN_PATH="$WORK/bin/herdr" \
+		HERDR_PLUGIN_STATE_DIR="$WORK/state" \
+		HERDR_WORKSPACE_ID="$ws" \
+		HERDR_PANE_ID="wT:p1" \
+		STUB_MADO_EXIT="${STUB_MADO_EXIT:-0}" \
+		sh "$ROOT/show.sh" "$@" )
+	SHOW_EXIT=$?
 }
 
 # 使い方: run_hook <event-json>
@@ -229,6 +250,69 @@ test_stale_record_reopens_pane
 test_remote_failure_reopens_pane
 test_new_pane_records_pane_id
 test_missing_mado_does_nothing
+
+# ── show.sh（明示呼び出し）──
+
+test_show_opens_given_files() {
+	new_work
+	mkdir -p "$WORK/repo/docs"
+	printf 'p\n' > "$WORK/repo/docs/plan.md"
+	printf 'r\n' > "$WORK/repo/report.md"
+	run_show docs/plan.md "$WORK/repo/report.md"      # 相対と絶対を混ぜる
+	[ "$SHOW_EXIT" -eq 0 ] || fail "show: exit 0 でない ($SHOW_EXIT)"
+	assert_call_grep "plugin pane open" "show"
+	assert_call_grep "MADO_REPORT_FILES=$WORK/repo/docs/plan.md|$WORK/repo/report.md" "show: 相対→絶対・順序維持"
+	assert_call_grep "target-pane wT:p1" "show: 呼び出し元ペインの右に開く"
+	[ "$(cat "$WORK/state/pane-wT" 2>/dev/null)" = "wT:pR" ] || fail "show: record が記録されていない"
+}
+
+test_show_outside_herdr_does_nothing() {
+	new_work
+	mkdir -p "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	run_show --no-herdr report.md
+	[ "$SHOW_EXIT" -eq 0 ] || fail "show-no-herdr: exit 0 でない ($SHOW_EXIT)"
+	assert_calls_empty "show-no-herdr"
+}
+
+test_show_skips_missing_files() {
+	new_work
+	mkdir -p "$WORK/repo"
+	run_show nope.md
+	[ "$SHOW_EXIT" -eq 0 ] || fail "show-missing: exit 0 でない ($SHOW_EXIT)"
+	assert_no_call_grep "plugin pane open" "show-missing"
+}
+
+test_show_reuses_recorded_pane() {
+	new_work
+	mkdir -p "$WORK/repo" "$WORK/state"
+	printf 'r\n' > "$WORK/repo/report.md"
+	printf 'wT:p9' > "$WORK/state/pane-wT"    # 生きているペインの記録あり
+	run_show report.md
+	assert_call_grep "mado -remote open $WORK/repo/report.md" "show-reuse"
+	assert_no_call_grep "plugin pane open" "show-reuse: 新規ペインを開かない"
+}
+
+# ── install-cli（config dir にシムを書く）──
+
+test_install_cli_writes_shim() {
+	new_work
+	mkdir -p "$WORK/cfg"
+	env HERDR_PLUGIN_ROOT="$ROOT" HERDR_PLUGIN_CONFIG_DIR="$WORK/cfg" \
+		HERDR_PLUGIN_STATE_DIR="$WORK/state" HERDR_BIN_PATH="$WORK/bin/herdr" \
+		sh "$ROOT/install-cli.sh" >/dev/null 2>&1
+	[ -x "$WORK/cfg/show" ] || fail "install-cli: 実行可能な shim $WORK/cfg/show が無い"
+	grep -q "$ROOT/show.sh" "$WORK/cfg/show" 2>/dev/null \
+		|| fail "install-cli: shim がプラグインルートの show.sh を指していない"
+	grep -q "HERDR_PLUGIN_STATE_DIR=" "$WORK/cfg/show" 2>/dev/null \
+		|| fail "install-cli: shim に state dir が焼き込まれていない"
+}
+
+test_show_opens_given_files
+test_show_outside_herdr_does_nothing
+test_show_skips_missing_files
+test_show_reuses_recorded_pane
+test_install_cli_writes_shim
 
 [ "$FAILED" -eq 0 ] && printf 'ok\n'
 exit "$FAILED"
