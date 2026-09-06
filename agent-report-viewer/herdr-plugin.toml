@@ -1,6 +1,6 @@
 id = "mado.agent-report-viewer"
 name = "mado agent report viewer"
-version = "0.1.1"
+version = "0.2.0"
 min_herdr_version = "0.8.0"
 description = "Show the markdown an agent run produced, in mado, when the run is done."
 platforms = ["linux", "macos"]
@@ -8,6 +8,12 @@ platforms = ["linux", "macos"]
 [[events]]
 on = "pane.agent_status_changed"
 command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/on-agent-done.sh\""]
+
+[[actions]]
+id = "install-cli"
+title = "agent-report-viewer: install the `show` command"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/install-cli.sh\""]
 
 [[panes]]
 id = "report"

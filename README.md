@@ -110,6 +110,30 @@ It subscribes to the `pane.agent_status_changed` event rather than a
 keybinding, so there is nothing further to set up — it runs on its own
 whenever an agent run in a git repository finishes.
 
+### Showing a file on demand
+
+The hook only notices markdown that is still uncommitted, so a report
+the agent commits in the same turn never shows. For that — or whenever
+you just want a file in the report pane — there is an explicit entry
+point. Install it once:
+
+```sh
+herdr plugin action invoke mado.agent-report-viewer.install-cli
+```
+
+That writes a `show` command into the plugin's config directory, so it
+works the same whether the plugin is installed from GitHub or linked
+from a clone. From any pane in that herdr:
+
+```sh
+sh "$(herdr plugin config-dir mado.agent-report-viewer)/show" docs/plan.md notes.md
+```
+
+Paths are relative to the current directory; the files open as tabs in
+the workspace's report pane, reusing it exactly like the hook does. An
+agent can run this itself after writing a plan or report, committed or
+not. Outside herdr, or for files that don't exist, it does nothing.
+
 ### Requirements
 
 - herdr 0.8.0 or newer
