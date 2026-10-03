@@ -21,11 +21,24 @@ herdr=${HERDR_BIN_PATH:-herdr}
 
 mkdir -p "$state" 2>/dev/null || exit 0
 sock="$state/report-$workspace_id.sock"
+
+# 開いた／タブ追加したファイル名をトーストで知らせる。別ペインを見ている間に
+# レポートが出たことに気づけるように。失敗しても無視する（exit 0 方針）。
+notify() { # <絶対パス…>
+	body=""; n=0
+	for f in "$@"; do
+		n=$((n + 1))
+		[ "$n" -le 3 ] && body="${body}${body:+, }$(basename "$f")"
+	done
+	[ "$n" -gt 3 ] && body="$body 他$((n - 3))件"
+	"$herdr" notification show "mado report" --body "$body" --sound none >/dev/null 2>&1 || true
+}
 record="$state/pane-$workspace_id"
 
 # 記録された報告ペインがまだ生きていれば、その mado にタブとして渡す。
 if [ -f "$record" ] && "$herdr" pane get "$(cat "$record")" >/dev/null 2>&1; then
 	if MADO_SOCKET=$sock mado -remote open "$@" >/dev/null 2>&1; then
+		notify "$@"
 		exit 0
 	fi
 	# ペインは居るが mado がこの socket で応答しない（herdr 再起動でペインが
@@ -42,6 +55,7 @@ for f in "$@"; do
 }$f"
 done
 cwd=${REPORT_CWD:-$(dirname "$1")}
+opened=$files
 
 set -- --plugin mado.agent-report-viewer --entrypoint report
 if [ -n "${REPORT_TARGET_PANE:-}" ]; then
@@ -62,4 +76,12 @@ fi
 if [ -n "$new_pane" ]; then
 	printf '%s' "$new_pane" > "$record" 2>/dev/null || true
 fi
+IFS='
+'
+set -f
+# shellcheck disable=SC2086
+set -- $opened
+set +f
+unset IFS
+notify "$@"
 exit 0

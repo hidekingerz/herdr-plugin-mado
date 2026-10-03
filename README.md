@@ -98,7 +98,9 @@ When an agent run finishes, this plugin looks at the uncommitted `*.md`
 files in that agent pane's git work tree and opens them in mado — newest
 first, up to four files. Each workspace gets one mado pane; a later run
 adds tabs to that same pane instead of opening a new one, so the reports
-from a working session collect in one place beside the agent.
+from a working session collect in one place beside the agent. Each time
+it opens or adds files it shows a herdr toast naming them, so you notice
+a new report even while looking at another pane.
 
 ### Install
 
