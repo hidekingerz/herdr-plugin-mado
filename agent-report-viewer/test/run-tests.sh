@@ -27,6 +27,10 @@ _make_stubs() {
 		printf '{"id":"x","result":{"pane":{"pane_id":"%s","cwd":"%s"}}}\n' "$3" "$STUB_CWD"
 		;;
 	"plugin pane")
+		# pane-open-fail マーカーがあれば herdr がペインを開けなかった状況を再現する。
+		if [ -f "$STUB_PANE_OPEN_FAIL" ]; then
+			printf '{"error":{"code":"invalid_params"}}\n'; exit 1
+		fi
 		# 新規に開いたペインは、既存記録 (wT:p9) と区別できる id を返す。
 		printf '{"id":"x","result":{"plugin_pane":{"pane":{"pane_id":"wT:pR","cwd":"%s"}}}}\n' "$STUB_CWD"
 		;;
@@ -40,7 +44,7 @@ _make_stubs() {
 	STUB
 	chmod +x "$WORK/bin/herdr" "$WORK/madobin/mado"
 	CALLS="$WORK/calls.log"; : > "$CALLS"
-	export CALLS STUB_CWD="$WORK/repo" STUB_PANE_GONE="$WORK/pane-gone"
+	export CALLS STUB_CWD="$WORK/repo" STUB_PANE_GONE="$WORK/pane-gone" STUB_PANE_OPEN_FAIL="$WORK/pane-open-fail"
 }
 
 _run_hook_common() { # <path-value> <event-json>
@@ -251,6 +255,42 @@ test_remote_failure_reopens_pane
 test_new_pane_records_pane_id
 test_missing_mado_does_nothing
 
+# ── 通知（ペインを開いた／タブを追加したら herdr notification show）──
+
+test_new_pane_notifies_with_filenames() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	printf 'p\n' > "$WORK/repo/plan.md"
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "notification show" "notify-new"
+	line=$(grep "notification show" "$WORK/calls.log" || true)
+	case "$line" in *report.md*) ;; *) fail "notify-new: 本文に report.md が無い ($line)";; esac
+	case "$line" in *plan.md*) ;; *) fail "notify-new: 本文に plan.md が無い ($line)";; esac
+	case "$line" in *"$WORK/repo/"*) fail "notify-new: 本文にディレクトリが混ざっている ($line)";; esac
+}
+
+test_reuse_notifies() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	mkdir -p "$WORK/state"; printf 'wT:p9' > "$WORK/state/pane-wT"
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "mado -remote open" "notify-reuse: 再利用経路"
+	assert_call_grep "notification show" "notify-reuse"
+}
+
+test_failed_pane_open_does_not_notify() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	: > "$WORK/pane-open-fail"
+	run_hook "$(done_event wT:p1 wT)"
+	[ "$HOOK_EXIT" -eq 0 ] || fail "notify-fail: exit 0 でない ($HOOK_EXIT)"
+	assert_call_grep "plugin pane open" "notify-fail: open は試みる"
+	assert_no_call_grep "notification show" "notify-fail: 開けなかったのに通知した"
+}
+
 # ── show.sh（明示呼び出し）──
 
 test_show_opens_given_files() {
@@ -308,6 +348,9 @@ test_install_cli_writes_shim() {
 		|| fail "install-cli: shim に state dir が焼き込まれていない"
 }
 
+test_new_pane_notifies_with_filenames
+test_reuse_notifies
+test_failed_pane_open_does_not_notify
 test_show_opens_given_files
 test_show_outside_herdr_does_nothing
 test_show_skips_missing_files
