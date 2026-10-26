@@ -18,22 +18,32 @@ beside the agent that is writing it.
 
 ## Updating
 
-herdr has no `plugin update` command. To pick up a new release, run the
-same `herdr plugin install …` command again: it replaces the managed
-checkout in place and keeps your plugin config. Pin a specific release
-with `--ref`:
+`herdr plugin update` (herdr 0.9.4 or newer) refreshes every plugin
+installed from GitHub, or only the ones you name:
 
 ```sh
-herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer            # latest
-herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer --ref v0.3.1  # pinned
+herdr plugin update                              # everything installed from GitHub
+herdr plugin update mado.agent-report-viewer     # one plugin, by id
+```
+
+It refetches the ref recorded at install time: a plugin installed from
+`main` moves to the latest commit, one pinned with `--ref` stays on that
+release. To move a pin, or on herdr older than 0.9.4, run the same
+`herdr plugin install …` again — it replaces the managed checkout in
+place and keeps your plugin config:
+
+```sh
+herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer               # latest
+herdr plugin install hidekingerz/herdr-plugin-mado/agent-report-viewer --ref v0.4.1  # pinned
 ```
 
 There is no auto-update; releases are listed on the
 [releases page](https://github.com/hidekingerz/herdr-plugin-mado/releases).
 A plugin you `herdr plugin link`ed from a local clone follows that clone
-instead — `git pull` is the update. Installing it from GitHub on top
-fails with `already linked from a local path`; `herdr plugin unlink
-<id>` first if you really want the managed copy.
+instead — `git pull` is the update, and `plugin update` leaves it alone.
+Installing it from GitHub on top fails with `already linked from a local
+path`; `herdr plugin unlink <id>` first if you really want the managed
+copy.
 
 ## docs-peek
 
@@ -220,10 +230,13 @@ herdr plugin log list --plugin mado.loop-dash
 
 - **markdown link handler** — Control+click a `.md` path in any pane and
   send it to mado. Shelved: herdr routes link-handler clicks only for
-  `http(s)` URLs — bare file paths, `file://` URLs, and OSC 8 hyperlinks
-  never reach a handler (verified against herdr 0.8.0). A plugin cannot
-  make an agent-written `.md` path clickable on its own. Revisit if herdr
-  starts routing `file://` or OSC 8 links; tracked in
+  text it already treats as a link. Up to herdr 0.8 that meant `http(s)`
+  URLs only; since herdr 0.9.0 an OSC 8 `file://` hyperlink also reaches
+  a matching handler (with `ui.mouse_capture` on). A bare file path
+  printed by an agent is still not a link, so a plugin cannot make an
+  agent-written `.md` path clickable on its own. Revisit if agents start
+  emitting OSC 8 links for the files they write, or herdr starts
+  detecting bare paths; tracked in
   [hidekingerz/mado#13](https://github.com/hidekingerz/mado/issues/13).
 
 ## License
