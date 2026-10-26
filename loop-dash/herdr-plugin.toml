@@ -1,8 +1,8 @@
 id = "mado.loop-dash"
 name = "mado loop dash"
-version = "0.1.1"
+version = "0.1.2"
 min_herdr_version = "0.8.0"
-description = "Keep an agent loop's TASKS.md / log.md on screen in a mado pane that follows the files."
+description = "Keep an agent loop's state docs (loop/MEMORY.md, VISION.md, ARCHITECTURE.md, RULES.md) on screen in a mado pane that follows the files."
 platforms = ["linux", "macos"]
 
 [[actions]]
