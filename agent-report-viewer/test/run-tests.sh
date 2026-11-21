@@ -26,6 +26,15 @@ _make_stubs() {
 		fi
 		printf '{"id":"x","result":{"pane":{"pane_id":"%s","cwd":"%s"}}}\n' "$3" "$STUB_CWD"
 		;;
+	"pane list")
+		# 同じワークスペースのペイン一覧。テストが置いた JSON を返す。
+		if [ -f "$STUB_PANES" ]; then cat "$STUB_PANES"; else printf '{"id":"x","result":{"panes":[]}}\n'; fi
+		;;
+	"pane process-info")
+		# `pane process-info --pane <id>`: そのペインの前面プロセス。
+		if [ -f "$STUB_PROCDIR/$4" ]; then cat "$STUB_PROCDIR/$4"
+		else printf '{"id":"x","result":{"process_info":{"foreground_processes":[],"pane_id":"%s"}}}\n' "$4"; fi
+		;;
 	"plugin pane")
 		# pane-open-fail マーカーがあれば herdr がペインを開けなかった状況を再現する。
 		if [ -f "$STUB_PANE_OPEN_FAIL" ]; then
@@ -45,6 +54,10 @@ _make_stubs() {
 	chmod +x "$WORK/bin/herdr" "$WORK/madobin/mado"
 	CALLS="$WORK/calls.log"; : > "$CALLS"
 	export CALLS STUB_CWD="$WORK/repo" STUB_PANE_GONE="$WORK/pane-gone" STUB_PANE_OPEN_FAIL="$WORK/pane-open-fail"
+	# mado のソケット置き場は必ず $WORK の中を見させる（開発機で動いている本物の
+	# mado のソケットを拾わないように）。
+	mkdir -p "$WORK/run/mado" "$WORK/tmp" "$WORK/proc"
+	export STUB_PANES="$WORK/panes.json" STUB_PROCDIR="$WORK/proc" XDG_RUNTIME_DIR="$WORK/run" TMPDIR="$WORK/tmp"
 }
 
 _run_hook_common() { # <path-value> <event-json>
@@ -486,6 +499,129 @@ test_done_without_start_uses_previous_done
 test_subdir_cwd_resolves_from_repo_root
 test_filename_with_space_opens
 test_staged_md_opens
+
+# ── 既に動いている mado の再利用（report ペインが無いとき、同じタブの mado にタブを足す）──
+
+# ワークスペース wT のペイン一覧を置く。引数は "<pane-id> <tab-id>" を1ペインずつ。
+# herdr の実出力と同じくキーはアルファベット順で、pane_id と tab_id の間に入れ子の
+# オブジェクト (scroll) が挟まる。
+set_panes() {
+	sep=""; body=""
+	for pt in "$@"; do
+		set -f; set -- $pt "$@"; set +f       # $1=pane $2=tab（以降は元の引数）
+		body="$body$sep{\"agent_status\":\"unknown\",\"cwd\":\"/x\",\"pane_id\":\"$1\",\"revision\":0,\"scroll\":{\"viewport_rows\":68},\"tab_id\":\"$2\",\"workspace_id\":\"wT\"}"
+		sep=","; shift 2
+	done
+	printf '{"id":"x","result":{"panes":[%s]}}\n' "$body" > "$WORK/panes.json"
+}
+# <pane-id> で mado が pid <pid> で動いていることにする。--no-socket を付けると
+# pid 名のソケットを置かない（MADO_SOCKET 指定で起動した mado の再現）。
+# pid は実在しえない大きさにして、本物のソケットと偶然一致しないようにする。
+MADO_PID=4242424
+user_mado() { # <pane-id> [--no-socket]
+	mkdir -p "$WORK/proc" "$WORK/run/mado"
+	printf '{"id":"x","result":{"process_info":{"foreground_process_group_id":%s,"foreground_processes":[{"argv":["mado","notes.md"],"argv0":"mado","cmdline":"mado notes.md","cwd":"/x","name":"mado","pid":%s}],"pane_id":"%s","shell_pid":4000}}}\n' \
+		"$MADO_PID" "$MADO_PID" "$1" > "$WORK/proc/$1"
+	[ "${2:-}" = "--no-socket" ] || : > "$WORK/run/mado/$MADO_PID.sock"
+}
+# report.md を1つ未コミットで持つリポジトリを用意する。
+repo_with_report() {
+	scratch_repo "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+}
+# jq を隠した PATH（sed / grep のフォールバック経路を通す）。システムの
+# /usr/bin に jq が入っている環境があるので、必要な道具だけ並べた場所を作る。
+nojq_path() {
+	mkdir -p "$WORK/nojq"
+	for t in sh git sed grep awk head cut sort stat date tr cat rm mkdir dirname basename id; do
+		p=$(command -v "$t") && ln -sf "$p" "$WORK/nojq/$t"
+	done
+	printf '%s' "$WORK/bin:$WORK/madobin:$WORK/nojq"
+}
+
+test_adopts_user_mado_in_same_tab() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1"
+	user_mado wT:p2
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "mado -remote open $WORK/repo/report.md MADO_SOCKET=$WORK/run/mado/$MADO_PID.sock" "adopt: 既存の mado に送られていない"
+	assert_no_call_grep "plugin pane open" "adopt: 既存の mado が居るのに新しいペインを開いた"
+	assert_call_grep "notification show" "adopt: 通知が無い"
+	[ ! -f "$WORK/state/pane-wT" ] || fail "adopt: ユーザーのペインを report ペインとして記録した"
+}
+
+test_adopts_user_mado_without_jq() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1"
+	user_mado wT:p2
+	_run_hook_common "$(nojq_path)" "$(done_event wT:p1 wT)"
+	assert_call_grep "mado -remote open $WORK/repo/report.md MADO_SOCKET=$WORK/run/mado/$MADO_PID.sock" "adopt-nojq: 既存の mado に送られていない"
+	assert_no_call_grep "plugin pane open" "adopt-nojq: 新しいペインを開いた"
+}
+
+test_ignores_user_mado_in_other_tab() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t2"         # mado は別タブ（見えていない）
+	user_mado wT:p2
+	run_hook "$(done_event wT:p1 wT)"
+	assert_no_call_grep "mado -remote" "other-tab: 見えていないタブの mado に送った"
+	assert_call_grep "plugin pane open" "other-tab: 新しいペインを開いていない"
+}
+
+test_ignores_mado_without_pid_socket() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1"
+	user_mado wT:p2 --no-socket                   # loop-dash のように専用ソケットの mado
+	run_hook "$(done_event wT:p1 wT)"
+	assert_no_call_grep "mado -remote" "no-sock: 送り先のソケットが無いのに送った"
+	assert_call_grep "plugin pane open" "no-sock: 新しいペインを開いていない"
+}
+
+test_adoption_failure_opens_pane_and_keeps_user_pane() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1"
+	user_mado wT:p2
+	STUB_MADO_EXIT=1
+	run_hook "$(done_event wT:p1 wT)"             # 既存の mado が応答しない
+	unset STUB_MADO_EXIT
+	assert_call_grep "plugin pane open" "adopt-fail: 新しいペインに倒れていない"
+	assert_no_call_grep "pane close" "adopt-fail: ユーザーのペインを閉じた"
+}
+
+test_recorded_report_pane_wins_over_user_mado() {
+	new_work
+	repo_with_report
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1" "wT:p9 wT:t1"
+	user_mado wT:p2
+	mkdir -p "$WORK/state"; printf 'wT:p9' > "$WORK/state/pane-wT"    # report ペインが既にある
+	run_hook "$(done_event wT:p1 wT)"
+	assert_call_grep "MADO_SOCKET=$WORK/state/report-wT.sock" "report-wins: report ペインに送られていない"
+	assert_no_call_grep "MADO_SOCKET=$WORK/run/mado" "report-wins: ユーザーの mado にも送った"
+}
+
+test_show_adopts_user_mado() {
+	new_work
+	mkdir -p "$WORK/repo"
+	printf 'r\n' > "$WORK/repo/report.md"
+	set_panes "wT:p1 wT:t1" "wT:p2 wT:t1"
+	user_mado wT:p2
+	run_show report.md
+	assert_call_grep "mado -remote open $WORK/repo/report.md MADO_SOCKET=$WORK/run/mado/$MADO_PID.sock" "show-adopt: 既存の mado に送られていない"
+	assert_no_call_grep "plugin pane open" "show-adopt: 新しいペインを開いた"
+}
+
+test_adopts_user_mado_in_same_tab
+test_adopts_user_mado_without_jq
+test_ignores_user_mado_in_other_tab
+test_ignores_mado_without_pid_socket
+test_adoption_failure_opens_pane_and_keeps_user_pane
+test_recorded_report_pane_wins_over_user_mado
+test_show_adopts_user_mado
 
 [ "$FAILED" -eq 0 ] && printf 'ok\n'
 exit "$FAILED"
