@@ -104,13 +104,24 @@ herdr plugin log list --plugin mado.docs-peek
 
 ## agent-report-viewer
 
-When an agent run finishes, this plugin looks at the uncommitted `*.md`
-files in that agent pane's git work tree and opens them in mado — newest
-first, up to four files. Each workspace gets one mado pane; a later run
-adds tabs to that same pane instead of opening a new one, so the reports
-from a working session collect in one place beside the agent. Each time
-it opens or adds files it shows a herdr toast naming them, so you notice
-a new report even while looking at another pane.
+When an agent run finishes, this plugin opens the markdown that run
+touched, in mado — the `*.md` files in that agent pane's git repository
+that were written since the run started, whether they are still
+uncommitted or the agent already committed them. Newest first, up to
+four files. A run that touched no markdown opens nothing, so notes left
+uncommitted from an earlier session do not come back on every run.
+
+Each workspace gets one mado pane; a later run adds tabs to that same
+pane instead of opening a new one, so the reports from a working session
+collect in one place beside the agent. Each time it opens or adds files
+it shows a herdr toast naming them, so you notice a new report even
+while looking at another pane.
+
+The plugin notes the time when an agent starts working and compares file
+modification times against it when the run is done. If it never saw the
+run start — it was installed mid-run, say — it measures from that pane's
+previous finished run instead; with neither to go on it opens every
+uncommitted `*.md`, once.
 
 ### Install
 
@@ -124,10 +135,10 @@ whenever an agent run in a git repository finishes.
 
 ### Showing a file on demand
 
-The hook only notices markdown that is still uncommitted, so a report
-the agent commits in the same turn never shows. For that — or whenever
-you just want a file in the report pane — there is an explicit entry
-point. Install it once:
+The hook shows what the run itself wrote inside its repository. For
+anything else — a file from an earlier run, one outside the repository
+or ignored by git, or just something you want in the report pane — there
+is an explicit entry point. Install it once:
 
 ```sh
 herdr plugin action invoke mado.agent-report-viewer.install-cli
@@ -143,8 +154,9 @@ sh "$(herdr plugin config-dir mado.agent-report-viewer)/show" docs/plan.md notes
 
 Paths are relative to the current directory; the files open as tabs in
 the workspace's report pane, reusing it exactly like the hook does. An
-agent can run this itself after writing a plan or report, committed or
-not. Outside herdr, or for files that don't exist, it does nothing.
+agent can run this itself to put a file in front of you mid-run, without
+waiting for the run to finish. Outside herdr, or for files that don't
+exist, it does nothing.
 
 ### Requirements
 
