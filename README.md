@@ -117,6 +117,14 @@ collect in one place beside the agent. Each time it opens or adds files
 it shows a herdr toast naming them, so you notice a new report even
 while looking at another pane.
 
+If mado is already running in the agent's tab — one you started
+yourself, or a docs-peek pane — the plugin does not add a pane: the
+files open as tabs in that mado. It asks herdr which panes in the tab
+have mado in the foreground and talks to that instance directly, so a
+mado in another tab, another workspace or another terminal never
+receives them. Once the plugin has opened its own report pane, that one
+keeps taking the reports.
+
 The plugin notes the time when an agent starts working and compares file
 modification times against it when the run is done. If it never saw the
 run start — it was installed mid-run, say — it measures from that pane's
@@ -153,7 +161,8 @@ sh "$(herdr plugin config-dir mado.agent-report-viewer)/show" docs/plan.md notes
 ```
 
 Paths are relative to the current directory; the files open as tabs in
-the workspace's report pane, reusing it exactly like the hook does. An
+the workspace's report pane — or in a mado already running in that tab —
+exactly like the hook does. An
 agent can run this itself to put a file in front of you mid-run, without
 waiting for the run to finish. Outside herdr, or for files that don't
 exist, it does nothing.

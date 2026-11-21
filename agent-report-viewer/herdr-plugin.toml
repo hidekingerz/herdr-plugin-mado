@@ -1,6 +1,6 @@
 id = "mado.agent-report-viewer"
 name = "mado agent report viewer"
-version = "0.3.0"
+version = "0.4.0"
 min_herdr_version = "0.8.0"
 description = "Show the markdown an agent run touched, in mado, when the run is done."
 platforms = ["linux", "macos"]
