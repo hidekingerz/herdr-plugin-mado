@@ -357,5 +357,135 @@ test_show_skips_missing_files
 test_show_reuses_recorded_pane
 test_install_cli_writes_shim
 
+# ── ランの範囲（working で開始時刻を記録し、done ではそのラン中に触った md だけ開く）──
+
+status_event() { # <status>
+	printf '{"event":"pane_agent_status_changed","data":{"type":"pane_agent_status_changed","pane_id":"wT:p1","workspace_id":"wT","agent_status":"%s","agent":"claude"}}' "$1"
+}
+# ラン開始より前に書かれた md を再現する（mtime を過去にする）。
+stale() { touch -t 202601010000 "$@"; }
+commit_all() {
+	git -C "$WORK/repo" add -A
+	git -C "$WORK/repo" -c user.email=t@t -c user.name=t commit -q -m run
+}
+
+test_run_ignores_md_written_before_it() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'old\n' > "$WORK/repo/notes.md"; stale "$WORK/repo/notes.md"
+	run_hook "$(status_event working)"
+	printf 'code\n' > "$WORK/repo/main.go"       # このランはコードしか触らない
+	run_hook "$(status_event done)"
+	assert_no_call_grep "plugin pane open" "run-stale: 前から残っている md で開いた"
+	assert_no_call_grep "^mado" "run-stale"
+	assert_no_call_grep "notification show" "run-stale: 通知した"
+}
+
+test_run_opens_only_md_written_in_it() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'old\n' > "$WORK/repo/notes.md"; stale "$WORK/repo/notes.md"
+	run_hook "$(status_event working)"
+	printf 'new\n' > "$WORK/repo/plan.md"
+	run_hook "$(status_event done)"
+	line=$(grep "plugin pane open" "$WORK/calls.log" || true)
+	case "$line" in *plan.md*) ;; *) fail "run-new: ラン中に書いた plan.md が開かれていない ($line)";; esac
+	case "$line" in *notes.md*) fail "run-new: 前から残っている notes.md まで開いた";; esac
+}
+
+test_run_opens_md_committed_in_it() {
+	new_work
+	scratch_repo "$WORK/repo"
+	run_hook "$(status_event working)"
+	printf 'plan\n' > "$WORK/repo/plan.md"
+	commit_all                                    # 同じランの中でコミットまで済ませた
+	run_hook "$(status_event done)"
+	line=$(grep "plugin pane open" "$WORK/calls.log" || true)
+	case "$line" in *plan.md*) ;; *) fail "run-committed: コミット済みの plan.md が開かれていない ($line)";; esac
+}
+
+test_run_start_survives_blocked_and_resume() {
+	new_work
+	scratch_repo "$WORK/repo"
+	run_hook "$(status_event working)"
+	printf 'plan\n' > "$WORK/repo/plan.md"
+	sleep 1                                       # 再開時刻が plan.md の mtime を追い越すように
+	run_hook "$(status_event blocked)"            # 承認待ち
+	run_hook "$(status_event working)"            # 再開。開始時刻を上書きしてはいけない
+	run_hook "$(status_event done)"
+	line=$(grep "plugin pane open" "$WORK/calls.log" || true)
+	case "$line" in *plan.md*) ;; *) fail "run-blocked: 承認待ちの前に書いた plan.md が落ちた ($line)";; esac
+}
+
+test_next_run_starts_fresh() {
+	new_work
+	scratch_repo "$WORK/repo"
+	run_hook "$(status_event working)"
+	printf 'plan\n' > "$WORK/repo/plan.md"
+	run_hook "$(status_event done)"               # 1ラン目: plan.md を開く
+	stale "$WORK/repo/plan.md"                    # 時間が経った、を再現
+	run_hook "$(status_event working)"
+	run_hook "$(status_event done)"               # 2ラン目は md を触っていない
+	assert_no_call_grep "plugin pane open" "run-fresh: 前のランの md をまた開いた"
+	assert_no_call_grep "^mado" "run-fresh: 前のランの md をまたタブに送った"
+}
+
+test_done_without_start_uses_previous_done() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'old\n' > "$WORK/repo/notes.md"; stale "$WORK/repo/notes.md"
+	run_hook "$(status_event done)"               # 開始を見ていない初回: 従来どおり開く
+	assert_call_grep "plugin pane open" "prev-done: 基準が無い初回は従来どおり開く"
+	run_hook "$(status_event done)"               # 2回目: 前回 done 以降に触った md は無い
+	assert_no_call_grep "plugin pane open" "prev-done: 触っていない md でまた開いた"
+	assert_no_call_grep "^mado" "prev-done: 触っていない md をまたタブに送った"
+}
+
+# ── パスの扱い ──
+
+test_subdir_cwd_resolves_from_repo_root() {
+	new_work
+	scratch_repo "$WORK/repo" top.md pkg/api/README.md
+	printf 'e\n' >> "$WORK/repo/top.md"
+	printf 'e\n' >> "$WORK/repo/pkg/api/README.md"
+	_make_stubs
+	STUB_CWD="$WORK/repo/pkg/api"                 # agent ペインはサブディレクトリに居る
+	env PATH="$WORK/bin:$WORK/madobin:$PATH" HERDR_BIN_PATH="$WORK/bin/herdr" \
+		HERDR_PLUGIN_STATE_DIR="$WORK/state" HERDR_PLUGIN_EVENT_JSON="$(status_event done)" \
+		sh "$ROOT/on-agent-done.sh"
+	line=$(grep "plugin pane open" "$WORK/calls.log" || true)
+	case "$line" in *"$WORK/repo/pkg/api/README.md"*) ;; *) fail "subdir: pkg/api/README.md が正しいパスで開かれていない ($line)";; esac
+	case "$line" in *"$WORK/repo/top.md"*) ;; *) fail "subdir: リポジトリ直下の top.md が開かれていない ($line)";; esac
+}
+
+test_filename_with_space_opens() {
+	new_work
+	scratch_repo "$WORK/repo"
+	printf 'p\n' > "$WORK/repo/my plan.md"
+	run_hook "$(status_event done)"
+	assert_call_grep "MADO_REPORT_FILES=$WORK/repo/my plan.md" "space: 空白入りファイル名が開かれていない"
+}
+
+test_staged_md_opens() {
+	new_work
+	scratch_repo "$WORK/repo" a.md
+	git -C "$WORK/repo" mv a.md b.md              # ステージ済みのリネーム
+	printf 'n\n' > "$WORK/repo/c.md"; git -C "$WORK/repo" add c.md
+	run_hook "$(status_event done)"
+	line=$(grep "plugin pane open" "$WORK/calls.log" || true)
+	case "$line" in *b.md*) ;; *) fail "staged: リネーム後の b.md が開かれていない ($line)";; esac
+	case "$line" in *c.md*) ;; *) fail "staged: add 済みの c.md が開かれていない ($line)";; esac
+}
+
+test_run_ignores_md_written_before_it
+test_run_opens_only_md_written_in_it
+test_run_opens_md_committed_in_it
+test_run_start_survives_blocked_and_resume
+test_next_run_starts_fresh
+test_done_without_start_uses_previous_done
+test_subdir_cwd_resolves_from_repo_root
+test_filename_with_space_opens
+test_staged_md_opens
+
 [ "$FAILED" -eq 0 ] && printf 'ok\n'
 exit "$FAILED"
